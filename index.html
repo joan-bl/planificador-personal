@@ -9,7 +9,8 @@
 <title>Planificador Personal</title>
 <style>
 /* CSS clásico (sin Tailwind, sin grid, sin variables) para Safari de iOS 9 */
-* { -webkit-box-sizing: border-box; box-sizing: border-box; }
+/* touch-action no se hereda: se aplica a todo para quitar la espera de ~300 ms del doble toque */
+* { -webkit-box-sizing: border-box; box-sizing: border-box; touch-action: manipulation; }
 html, body { height: 100%; margin: 0; padding: 0; }
 body {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -315,6 +316,48 @@ function sortEvents(list) {
     });
 }
 
+// TOQUE RÁPIDO
+// Safari de iOS 9 espera ~300 ms tras cada toque antes de lanzar el "click".
+// Aquí se lanza el click en cuanto se levanta el dedo, si el dedo no se ha movido
+// (para no interferir con el desplazamiento). Los campos de texto y las casillas
+// se dejan con su comportamiento normal para que el teclado funcione.
+// Escuchar "touchstart" también hace que funcione el estilo :active (respuesta visual).
+var tapStart = null;
+
+function tapTarget(el) {
+    while (el && el !== document.body) {
+        var tag = el.tagName;
+        if (tag === "INPUT" || tag === "LABEL" || tag === "SELECT" || tag === "TEXTAREA") return null;
+        if (tag === "BUTTON" || el.onclick) return el;
+        el = el.parentNode;
+    }
+    return null;
+}
+
+document.addEventListener("touchstart", function(e) {
+    var t = e.touches[0];
+    tapStart = e.touches.length === 1 ? { x: t.pageX, y: t.pageY, time: new Date().getTime() } : null;
+}, false);
+
+document.addEventListener("touchend", function(e) {
+    if (!tapStart) return;
+    var t = e.changedTouches[0];
+    var moved = Math.abs(t.pageX - tapStart.x) > 10 || Math.abs(t.pageY - tapStart.y) > 10;
+    var slow = new Date().getTime() - tapStart.time > 600;
+    tapStart = null;
+    if (moved || slow) return;
+
+    var target = tapTarget(e.target);
+    if (!target) return;
+
+    // Si hay un campo de texto activo, se cierra el teclado como haría un toque normal
+    var active = document.activeElement;
+    if (active && (active.tagName === "INPUT") && target.type !== "submit") active.blur();
+
+    e.preventDefault();   // anula el click lento que vendría después
+    target.click();
+}, false);
+
 window.onload = function() {
     updateHeaderDate();
     renderMonthGrid();
@@ -473,66 +516,67 @@ function saveDayModal() {
 }
 
 // 2. PLANIFICADOR SEMANAL
-function renderWeeklySchedule() {
-    var tbody = document.getElementById("weekly-schedule-body");
-    tbody.innerHTML = "";
+function slotClass(slotType) {
+    var cls = "slot touch-btn";
+    if (slotType === "Gimnasio") cls += " slot-gym";
+    else if (slotType === "Empleo") cls += " slot-job";
+    else if (slotType === "Hobby") cls += " slot-hobby";
+    else if (slotType === "Rutina Matutina") cls += " slot-rutina";
+    return cls;
+}
 
-    var gymCount = 0, jobCount = 0, hobbyCount = 0;
+// Construye la tabla entera (solo al cargar y al reiniciar la semana).
+// Los toques en una franja actualizan solo ese botón: en el iPad 2
+// reconstruir los 56 elementos en cada toque es lo que causaba el retraso.
+function renderWeeklySchedule() {
     var hours = Object.keys(weeklySchedule);
+    var html = "";
 
     for (var i = 0; i < hours.length; i++) {
         var hour = hours[i];
-        var rowDiv = document.createElement("div");
-        rowDiv.className = "t-row";
-
-        var hourCell = document.createElement("div");
-        hourCell.className = "hour";
-        hourCell.innerText = hour;
-        rowDiv.appendChild(hourCell);
-
-        for (var dayIdx = 0; dayIdx < 7; dayIdx++) {
-            var slotType = weeklySchedule[hour][dayIdx];
-
-            if (slotType === "Gimnasio") gymCount++;
-            if (slotType === "Empleo") jobCount++;
-            if (slotType === "Hobby") hobbyCount++;
-
-            var cls = "slot touch-btn";
-            if (slotType === "Gimnasio") cls += " slot-gym";
-            else if (slotType === "Empleo") cls += " slot-job";
-            else if (slotType === "Hobby") cls += " slot-hobby";
-            else if (slotType === "Rutina Matutina") cls += " slot-rutina";
-
-            var cellDiv = document.createElement("div");
-            var btn = document.createElement("button");
-            btn.className = cls;
-            btn.innerText = slotType;
-            (function(h, d) {
-                btn.onclick = function() { toggleScheduleSlot(h, d); };
-            })(hour, dayIdx);
-
-            cellDiv.appendChild(btn);
-            rowDiv.appendChild(cellDiv);
+        html += '<div class="t-row"><div class="hour">' + hour + '</div>';
+        for (var d = 0; d < 7; d++) {
+            var slotType = weeklySchedule[hour][d];
+            html += '<div><button class="' + slotClass(slotType) + '" onclick="toggleScheduleSlot(\'' + hour + '\',' + d + ',this)">' +
+                escapeHtml(slotType) + '</button></div>';
         }
-        tbody.appendChild(rowDiv);
+        html += '</div>';
     }
 
+    document.getElementById("weekly-schedule-body").innerHTML = html;
+    updateWeeklyCounts();
+}
+
+function updateWeeklyCounts() {
+    var gymCount = 0, jobCount = 0, hobbyCount = 0;
+    for (var hour in weeklySchedule) {
+        if (!weeklySchedule.hasOwnProperty(hour)) continue;
+        for (var d = 0; d < 7; d++) {
+            var s = weeklySchedule[hour][d];
+            if (s === "Gimnasio") gymCount++;
+            else if (s === "Empleo") jobCount++;
+            else if (s === "Hobby") hobbyCount++;
+        }
+    }
     document.getElementById("gym-count").innerText = gymCount + "/3";
     document.getElementById("job-count").innerText = jobCount + " bloques";
     document.getElementById("hobby-count").innerText = hobbyCount + " bloques";
 }
 
-function toggleScheduleSlot(hour, dayIdx) {
+function toggleScheduleSlot(hour, dayIdx, btn) {
     var options = ["Empleo", "Gimnasio", "Hobby", "Libre"];
     var current = weeklySchedule[hour][dayIdx];
 
     if (current === "Rutina Matutina" || current === "Comida / Descanso") return;
 
-    var nextIdx = (options.indexOf(current) + 1) % options.length;
-    weeklySchedule[hour][dayIdx] = options[nextIdx];
+    var next = options[(options.indexOf(current) + 1) % options.length];
+    weeklySchedule[hour][dayIdx] = next;
 
-    saveJSON("ipad_weekly_schedule", weeklySchedule);
-    renderWeeklySchedule();
+    // Primero se pinta el cambio y luego se guarda, para que el toque se note al instante
+    btn.className = slotClass(next);
+    btn.innerText = next;
+    updateWeeklyCounts();
+    setTimeout(function() { saveJSON("ipad_weekly_schedule", weeklySchedule); }, 0);
 }
 
 function resetWeeklySchedule() {
