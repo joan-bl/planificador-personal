@@ -1,0 +1,9 @@
+CACHE MANIFEST
+# Cambia esta línea cada vez que modifiques index.html para que el iPad descargue la versión nueva.
+# v1 2026-11-17
+
+CACHE:
+index.html
+
+NETWORK:
+*

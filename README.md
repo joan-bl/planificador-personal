@@ -25,6 +25,13 @@ Safari de iOS 9 es muy antiguo, así que la app evita todo lo que no soporta:
   - En el planificador semanal, cada toque **actualiza solo esa franja** en lugar de reconstruir la tabla entera.
 - **Zonas táctiles de 44 px como mínimo** y **pantalla completa** al abrirla desde el icono de inicio.
 
+### Sin conexión
+
+La app funciona sin internet gracias a **Application Cache** (`offline.appcache`), la técnica que soporta iOS 9 (los *service workers* llegaron con iOS 11.3). La primera vez que se abre con conexión, Safari guarda `index.html`; a partir de ahí se carga desde el iPad aunque no haya red.
+
+- Cada vez que se abre con conexión, Safari comprueba si `offline.appcache` ha cambiado. Si ha cambiado, descarga la versión nueva y la app se recarga sola.
+- Los navegadores modernos ya no soportan Application Cache y simplemente lo ignoran: allí la web funciona igual, pero necesita conexión.
+
 ### Datos
 
 Se guardan en el `localStorage` de Safari, solo en ese iPad. No hay servidor ni cuenta.
@@ -43,13 +50,16 @@ Para cambiar las franjas horarias por defecto, edita `defaultSchedule` en el `<s
 
 Esta carpeta es el repositorio [`joan-bl/planificador-personal`](https://github.com/joan-bl/planificador-personal), publicado con GitHub Pages desde la rama `main`. Para actualizar la web:
 
+1. **Cambia la línea `# v…` de `offline.appcache`** (por ejemplo, `# v2 2026-12-01`). Si no lo haces, el iPad seguirá usando la copia guardada y no verá el cambio.
+2. Sube los cambios:
+
 ```bash
 git add -A
 git commit -m "Describe el cambio"
 git push
 ```
 
-GitHub tarda uno o dos minutos en publicar. En el iPad, cierra la app del todo (deslízala hacia arriba en el selector de apps) y vuelve a abrirla.
+GitHub tarda uno o dos minutos en publicar, y su caché puede retrasar el manifiesto unos 10 minutos más. En el iPad, abre la app con conexión: descarga la versión nueva en segundo plano y se recarga sola. Si no, ciérrala del todo (deslízala hacia arriba en el selector de apps) y vuelve a abrirla.
 
 ## Instalar en el iPad
 

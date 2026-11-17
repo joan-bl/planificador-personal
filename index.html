@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" manifest="offline.appcache">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -707,6 +707,17 @@ function renderTasks() {
         li.innerHTML = html;
         list.appendChild(li);
     }
+}
+
+// Sin conexión (Application Cache, compatible con iOS 9): si se ha descargado una versión nueva, se carga.
+// Los datos están en localStorage, así que recargar no pierde nada.
+if (window.applicationCache) {
+    window.applicationCache.addEventListener("updateready", function() {
+        if (window.applicationCache.status === window.applicationCache.UPDATEREADY) {
+            try { window.applicationCache.swapCache(); } catch (e) {}
+            window.location.reload();
+        }
+    }, false);
 }
 </script>
 </body>
